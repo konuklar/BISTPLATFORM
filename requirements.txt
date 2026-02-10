@@ -7,12 +7,6 @@ scipy==1.11.1
 # Data Fetching
 yfinance==0.2.28
 
-# requirements.txt 应该改为：
-streamlit==1.28.0
-pandas==2.0.3
-numpy==1.24.3
-scipy==1.11.1
-yfinance==0.2.28
 PyPortfolioOpt==1.5.5  # 注意：大写P和大写O
 
 # Performance Analytics
