@@ -1,4 +1,4 @@
-# Core dependencies
+# Core Dependencies
 streamlit==1.28.0
 numpy==1.24.3
 pandas==2.0.3
@@ -7,7 +7,7 @@ scipy==1.11.4
 yfinance==0.2.33
 requests==2.31.0
 
-# Portfolio optimization
+# Portfolio Optimization
 PyPortfolioOpt==1.5.5
 
 # Machine Learning
@@ -20,12 +20,24 @@ arch==6.2.0
 tensorflow==2.13.0
 keras==2.13.1
 
-# NLP & Text processing
+# NLP & Text Processing
 nltk==3.8.1
 beautifulsoup4==4.12.2
 
 # Reporting
 reportlab==4.0.4
 
-# Version compatibility fixes
+# Quantitative Analysis - NEW
+quantstats==0.0.62
+
+# Compatibility Fixes
 typing-extensions==4.5.0  # Compatible with TensorFlow 2.13.0
+
+# Utils
+python-dateutil==2.8.2
+pytz==2023.3
+tzdata==2023.3
+
+# Optional but useful
+openpyxl==3.1.2  # For Excel operations
+xlrd==2.0.1
