@@ -94,13 +94,23 @@ except ImportError:
     HAS_XGBOOST = False
 
 try:
+    # TensorFlow is OPTIONAL on Streamlit Cloud. Even if installed, binary/ABI mismatches (e.g., NumPy 2.x)
+    # can raise non-ImportError exceptions at import time. We therefore catch *any* exception and
+    # gracefully disable LSTM features if TF cannot be imported.
+    import tensorflow as tf  # noqa: F401
     from tensorflow.keras.models import Sequential, Model
     from tensorflow.keras.layers import Dense, LSTM, GRU, Dropout, BatchNormalization, Input
     from tensorflow.keras.optimizers import Adam, RMSprop
     from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
     HAS_TENSORFLOW = True
-except ImportError:
+    TENSORFLOW_IMPORT_ERROR = None
+except Exception as e:
     HAS_TENSORFLOW = False
+    TENSORFLOW_IMPORT_ERROR = f"{type(e).__name__}: {e}"
+    # Placeholders to avoid NameError if referenced accidentally
+    tf = None
+    Sequential = Model = Dense = LSTM = GRU = Dropout = BatchNormalization = Input = None
+    Adam = RMSprop = EarlyStopping = ReduceLROnPlateau = None
 
 # Time Series
 from statsmodels.tsa.stattools import adfuller, kpss, coint
@@ -6868,9 +6878,16 @@ def main():
                 st.markdown("**Machine Learning**")
                 use_ml = st.checkbox("Enable ML Predictions", value=False)
                 if use_ml:
+                    # Build model menu dynamically (Cloud-safe)
+                    ml_model_options = ['Random Forest', 'Gradient Boosting']
+                    if HAS_XGBOOST:
+                        ml_model_options.insert(1, 'XGBoost')
+                    if HAS_TENSORFLOW:
+                        ml_model_options.insert(2, 'LSTM')
+
                     ml_model = st.selectbox(
                         "ML Model",
-                        options=['Random Forest', 'XGBoost', 'LSTM', 'Gradient Boosting'],
+                        options=ml_model_options,
                         index=0
                     )
         
@@ -7433,6 +7450,12 @@ def main():
     
     # ── MACHINE LEARNING INTEGRATION ──
     if HAS_SKLEARN and 'use_ml' in locals() and use_ml:
+        # TensorFlow status (LSTM is optional on Streamlit Cloud)
+        if not HAS_TENSORFLOW:
+            st.warning("🧠 LSTM devre dışı: TensorFlow bu ortamda import edilemedi (Cloud uyumluluk/ABI).")
+            with st.expander("TensorFlow import detayı"):
+                st.code(TENSORFLOW_IMPORT_ERROR or "(hata detayı bulunamadı)")
+
         st.markdown("<div class='section-header'>Machine Learning Predictions</div>", unsafe_allow_html=True)
         
         with st.spinner("Training machine learning model..."):
