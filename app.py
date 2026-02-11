@@ -429,7 +429,7 @@ def sidebar_controls() -> Dict:
     _apply_safe_css(disable=st.session_state["ui_disable_css"])
 
     st.sidebar.markdown("### 📌 Data Source")
-    st.sidebar.info("Quantum BIST Platform (yfinance) only")
+    st.sidebar.info("Quantum BIST Platform (Quantum")
 
     st.sidebar.markdown("### 🧾 Universe")
     tickers = st.sidebar.multiselect(
