@@ -93,24 +93,13 @@ try:
 except ImportError:
     HAS_XGBOOST = False
 
-try:
-    # TensorFlow is OPTIONAL on Streamlit Cloud. Even if installed, binary/ABI mismatches (e.g., NumPy 2.x)
-    # can raise non-ImportError exceptions at import time. We therefore catch *any* exception and
-    # gracefully disable LSTM features if TF cannot be imported.
-    import tensorflow as tf  # noqa: F401
-    from tensorflow.keras.models import Sequential, Model
-    from tensorflow.keras.layers import Dense, LSTM, GRU, Dropout, BatchNormalization, Input
-    from tensorflow.keras.optimizers import Adam, RMSprop
-    from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
-    HAS_TENSORFLOW = True
-    TENSORFLOW_IMPORT_ERROR = None
-except Exception as e:
-    HAS_TENSORFLOW = False
-    TENSORFLOW_IMPORT_ERROR = f"{type(e).__name__}: {e}"
-    # Placeholders to avoid NameError if referenced accidentally
-    tf = None
-    Sequential = Model = Dense = LSTM = GRU = Dropout = BatchNormalization = Input = None
-    Adam = RMSprop = EarlyStopping = ReduceLROnPlateau = None
+# TensorFlow / LSTM (DISABLED BY DEFAULT for Streamlit Cloud stability)
+# If you want LSTM later, install a compatible TensorFlow build and enable it in a compatible environment.
+HAS_TENSORFLOW = False
+TENSORFLOW_IMPORT_ERROR = "disabled-by-default"
+tf = None
+Sequential = Model = Dense = LSTM = GRU = Dropout = BatchNormalization = Input = None
+Adam = RMSprop = EarlyStopping = ReduceLROnPlateau = None
 
 # Time Series
 from statsmodels.tsa.stattools import adfuller, kpss, coint
@@ -208,11 +197,18 @@ st.set_page_config(
     }
 )
 
+if "DISABLE_CSS" not in st.session_state:
+    st.session_state["DISABLE_CSS"] = False
+
+if "RUN_ANALYSIS" not in st.session_state:
+    st.session_state["RUN_ANALYSIS"] = False
+
 # ─────────────────────────────────────────────────────────────────────────────
 # ENHANCED CUSTOM CSS - PROFESSIONAL ENTERPRISE THEME
 # ─────────────────────────────────────────────────────────────────────────────
 
-st.markdown("""
+if not st.session_state.get("DISABLE_CSS", False):
+    st.markdown("""
 <style>
     /* ── Import Professional Fonts ── */
     @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&family=Roboto+Mono:wght@300;400;500&display=swap');
@@ -1427,7 +1423,7 @@ st.markdown("""
     .z-index-auto { z-index: auto !important; }
 
 </style>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ENUMS & DATA CLASSES
@@ -6757,11 +6753,70 @@ def main():
             • Pattern Recognition
             """)
     
+    # ── QUICK EXECUTION (MAIN AREA) ──
+    exec_cols = st.columns([1.2, 1.2, 5.0])
+    with exec_cols[0]:
+        if st.button("🚀 Execute", type="primary", use_container_width=True):
+            st.session_state["RUN_ANALYSIS"] = True
+            try:
+                st.rerun()
+            except Exception:
+                st.experimental_rerun()
+    with exec_cols[1]:
+        if st.button("🧹 Reset", use_container_width=True):
+            st.session_state["RUN_ANALYSIS"] = False
+            try:
+                st.rerun()
+            except Exception:
+                st.experimental_rerun()
+    with exec_cols[2]:
+        st.caption("Use the sidebar **Control Panel** to configure tickers/dates/optimization. Then click **Execute**.")
+
     st.markdown("<hr/>", unsafe_allow_html=True)
     
     # ── SIDEBAR CONFIGURATION ──
     with st.sidebar:
         st.markdown("## ⚙ Platform Configuration")
+        
+        # ── QUICK CONTROL PANEL (always visible) ──
+        st.markdown("### 🎛️ Control Panel")
+        st.caption("Configure inputs below, then click **Execute** to run heavy computations.")
+        
+        # Theme troubleshooting toggle (reruns app)
+        disable_css_ui = st.checkbox(
+            "Disable custom theme (troubleshooting)",
+            value=st.session_state.get("DISABLE_CSS", False),
+            help="If the sidebar/control panel looks broken, enable this to turn off custom CSS."
+        )
+        if disable_css_ui != st.session_state.get("DISABLE_CSS", False):
+            st.session_state["DISABLE_CSS"] = disable_css_ui
+            try:
+                st.rerun()
+            except Exception:
+                st.experimental_rerun()
+        
+        run_clicked = st.button(
+            "🚀 Execute / Run Analysis",
+            type="primary",
+            use_container_width=True,
+            help="Runs data download, risk metrics, optimization and charts using current sidebar settings."
+        )
+        if run_clicked:
+            st.session_state["RUN_ANALYSIS"] = True
+        
+        reset_clicked = st.button(
+            "🧹 Reset (stop running)",
+            use_container_width=True,
+            help="Stops auto-running heavy computations. You can change settings and execute again."
+        )
+        if reset_clicked:
+            st.session_state["RUN_ANALYSIS"] = False
+            try:
+                st.rerun()
+            except Exception:
+                st.experimental_rerun()
+        
+        st.divider()
         
         # Platform Mode Selection
         st.markdown("<div class='section-header'>Platform Mode</div>", unsafe_allow_html=True)
@@ -6838,7 +6893,7 @@ def main():
         )
         
         # Advanced Parameters
-        with st.expander("⚡ Advanced Parameters", icon="⚡"):
+        with st.expander("⚡ Advanced Parameters"):
             # Transaction Costs
             st.markdown("**Transaction Costs**")
             transaction_cost = st.slider(
@@ -6878,16 +6933,9 @@ def main():
                 st.markdown("**Machine Learning**")
                 use_ml = st.checkbox("Enable ML Predictions", value=False)
                 if use_ml:
-                    # Build model menu dynamically (Cloud-safe)
-                    ml_model_options = ['Random Forest', 'Gradient Boosting']
-                    if HAS_XGBOOST:
-                        ml_model_options.insert(1, 'XGBoost')
-                    if HAS_TENSORFLOW:
-                        ml_model_options.insert(2, 'LSTM')
-
                     ml_model = st.selectbox(
                         "ML Model",
-                        options=ml_model_options,
+                        options=['Random Forest', 'XGBoost', 'LSTM', 'Gradient Boosting'],
                         index=0
                     )
         
@@ -6914,6 +6962,11 @@ def main():
         
         generate_report = st.button("📊 Generate Comprehensive Report", use_container_width=True)
     
+    # ── GATE HEAVY COMPUTATION ──
+    if not st.session_state.get("RUN_ANALYSIS", False):
+        st.info("👈 Use the sidebar **Control Panel** and click **Execute / Run Analysis** to start.")
+        st.stop()
+
     # ── DATA LOADING & PROCESSING ──
     st.markdown("<div class='section-header'>Data Loading & Processing</div>", unsafe_allow_html=True)
     
@@ -7450,12 +7503,6 @@ def main():
     
     # ── MACHINE LEARNING INTEGRATION ──
     if HAS_SKLEARN and 'use_ml' in locals() and use_ml:
-        # TensorFlow status (LSTM is optional on Streamlit Cloud)
-        if not HAS_TENSORFLOW:
-            st.warning("🧠 LSTM devre dışı: TensorFlow bu ortamda import edilemedi (Cloud uyumluluk/ABI).")
-            with st.expander("TensorFlow import detayı"):
-                st.code(TENSORFLOW_IMPORT_ERROR or "(hata detayı bulunamadı)")
-
         st.markdown("<div class='section-header'>Machine Learning Predictions</div>", unsafe_allow_html=True)
         
         with st.spinner("Training machine learning model..."):
@@ -7556,7 +7603,7 @@ def main():
         )
     
     # Compliance summary
-    with st.expander("📋 Detailed Compliance Report", icon="📋"):
+    with st.expander("📋 Detailed Compliance Report"):
         st.markdown("##### Regulatory Compliance Status")
         
         compliance_data = []
@@ -7737,8 +7784,8 @@ if __name__ == "__main__":
             missing_packages.append("scikit-learn")
         if not HAS_XGBOOST:
             missing_packages.append("xgboost")
-        if not HAS_TENSORFLOW:
-            missing_packages.append("tensorflow")
+        # TensorFlow/LSTM disabled by default on Streamlit Cloud (optional)
+        # missing_packages.append("tensorflow")
         if not HAS_REPORTLAB:
             missing_packages.append("reportlab")
         
@@ -7771,7 +7818,7 @@ if __name__ == "__main__":
         """)
         
         # Show detailed error in expander
-        with st.expander("🔧 Technical Details & Troubleshooting", icon="🔧"):
+        with st.expander("🔧 Technical Details & Troubleshooting"):
             st.code(traceback.format_exc())
             
             st.markdown("""
