@@ -198,10 +198,47 @@ st.set_page_config(
 )
 
 if "DISABLE_CSS" not in st.session_state:
-    st.session_state["DISABLE_CSS"] = False
+    # Default to SAFE UI mode on Streamlit Cloud to ensure sidebar readability.
+    # You can re-enable the enterprise theme from the sidebar toggle.
+    st.session_state["DISABLE_CSS"] = True
 
 if "RUN_ANALYSIS" not in st.session_state:
     st.session_state["RUN_ANALYSIS"] = False
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SAFE UI CSS (always-on): improves sidebar readability without forcing colors
+# ─────────────────────────────────────────────────────────────────────────────
+st.markdown(
+    """
+<style>
+/* Wider, scrollable sidebar for dense control panels */
+section[data-testid="stSidebar"] {
+    min-width: 360px !important;
+    width: 380px !important;
+}
+section[data-testid="stSidebar"] > div {
+    overflow-y: auto;
+    padding-bottom: 2rem;
+}
+/* Make labels more legible */
+section[data-testid="stSidebar"] label,
+section[data-testid="stSidebar"] span,
+section[data-testid="stSidebar"] p,
+section[data-testid="stSidebar"] div {
+    font-size: 1.0rem;
+    line-height: 1.35rem;
+    white-space: normal;
+}
+/* Simple fallback styling for section headers when enterprise CSS is disabled */
+.section-header {
+    font-weight: 700;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+}
+</style>
+    """,
+    unsafe_allow_html=True
+)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ENHANCED CUSTOM CSS - PROFESSIONAL ENTERPRISE THEME
@@ -2818,6 +2855,13 @@ RISK_FREE_RATES = {
     'JPY': 0.01
 }
 
+# Default Risk-Free Rate used across the platform (annual, decimal).
+# In Türkiye-focused BIST analysis, we default to TRY risk-free proxy if provided.
+DEFAULT_RFR = float(os.getenv("DEFAULT_RFR", str(RISK_FREE_RATES.get("TRY", 0.05))))
+# Safety clamp: keep within [0%, 50%] so UI sliders remain stable.
+DEFAULT_RFR = max(0.0, min(DEFAULT_RFR, 0.50))
+
+
 # Transaction cost assumptions
 TRANSACTION_COSTS = {
     'commission_fixed': 0.001,  # 0.1% commission
@@ -3169,8 +3213,8 @@ class AdvancedDataFetcher:
         except Exception as e:
             logger.warning(f"Failed to save cache: {str(e)}")
     
-    def fetch_from_yahoo_finance(self, tickers: List[str], start_date: str, 
-                                end_date: str) -> Optional[Dict]:
+    def fetch_from_yahoo_finance(self, tickers: List[str], start_date: str,
+                                end_date: str, interval: str = "1d", auto_adjust: bool = True, return_type: str = "simple") -> Optional[Dict]:
         """Fetch data from Yahoo Finance with enhanced error handling"""
         for attempt in range(self.max_retries):
             try:
@@ -3181,10 +3225,11 @@ class AdvancedDataFetcher:
                     tickers,
                     start=start_date,
                     end=end_date,
+                    interval=interval,
                     progress=False,
                     threads=True,
                     group_by='ticker',
-                    auto_adjust=True,
+                    auto_adjust=auto_adjust,
                     actions=False
                 )
                 
@@ -3225,7 +3270,7 @@ class AdvancedDataFetcher:
                 volumes = volumes.ffill().bfill()
                 
                 # Calculate returns
-                returns = prices.pct_change().dropna()
+                returns = (prices.pct_change() if return_type == "simple" else np.log(prices / prices.shift(1))).dropna()
                 
                 # Remove tickers with insufficient data
                 min_valid_ratio = 0.7  # At least 70% valid data
@@ -3284,16 +3329,17 @@ class AdvancedDataFetcher:
             logger.error(f"Alpha Vantage failed: {str(e)}")
             return None
     
-    def fetch_benchmark_data(self, benchmark_tickers: List[str], start_date: str, 
-                            end_date: str) -> Optional[Dict]:
+    def fetch_benchmark_data(self, benchmark_tickers: List[str], start_date: str,
+                            end_date: str, interval: str = "1d", auto_adjust: bool = True, return_type: str = "simple") -> Optional[Dict]:
         """Fetch benchmark data"""
         try:
             benchmark_data = yf.download(
                 benchmark_tickers,
                 start=start_date,
                 end=end_date,
+                interval=interval,
                 progress=False,
-                auto_adjust=True
+                auto_adjust=auto_adjust
             )
             
             if benchmark_data.empty:
@@ -3318,7 +3364,7 @@ class AdvancedDataFetcher:
                     )
             
             benchmark_prices = benchmark_prices.ffill().bfill()
-            benchmark_returns = benchmark_prices.pct_change().dropna()
+            benchmark_returns = (benchmark_prices.pct_change() if return_type == "simple" else np.log(benchmark_prices / benchmark_prices.shift(1))).dropna()
             
             return {
                 'prices': benchmark_prices,
@@ -3415,16 +3461,19 @@ class AdvancedDataFetcher:
         return fundamental_data
     
     def fetch_market_data(self, tickers: List[str], benchmark_tickers: List[str],
-                         start_date: str, end_date: str, 
-                         use_cache: bool = True) -> Dict:
+                         start_date: str, end_date: str,
+                         use_cache: bool = True,
+                         interval: str = "1d",
+                         auto_adjust: bool = True,
+                         return_type: str = "simple") -> Dict:
         """
         Main method to fetch all market data with caching and fallbacks
         """
         logger.info(f"Fetching market data for {len(tickers)} tickers")
         
         # Generate cache keys
-        tickers_key = self._get_cache_key(tickers, start_date, end_date, 'yahoo')
-        benchmark_key = self._get_cache_key(benchmark_tickers, start_date, end_date, 'benchmark')
+        tickers_key = self._get_cache_key(tickers, start_date, end_date, f"yahoo_{interval}_{int(auto_adjust)}_{return_type}")
+        benchmark_key = self._get_cache_key(benchmark_tickers, start_date, end_date, f"benchmark_{interval}_{int(auto_adjust)}_{return_type}")
         
         # Try to load from cache
         if use_cache:
@@ -3443,7 +3492,7 @@ class AdvancedDataFetcher:
         # Try different data sources
         for source in self.data_sources:
             if source == 'yahoo_finance':
-                tickers_data = self.fetch_from_yahoo_finance(tickers, start_date, end_date)
+                tickers_data = self.fetch_from_yahoo_finance(tickers, start_date, end_date, interval=interval, auto_adjust=auto_adjust, return_type=return_type)
             elif source == 'alpha_vantage':
                 tickers_data = self.fetch_from_alpha_vantage(tickers, start_date, end_date)
             
@@ -3456,7 +3505,7 @@ class AdvancedDataFetcher:
             tickers_data = self._create_synthetic_data(tickers, start_date, end_date)
         
         # Fetch benchmark data
-        benchmark_data = self.fetch_benchmark_data(benchmark_tickers, start_date, end_date)
+        benchmark_data = self.fetch_benchmark_data(benchmark_tickers, start_date, end_date, interval=interval, auto_adjust=auto_adjust, return_type=return_type)
         
         # Fetch fundamental data
         fundamental_data = self.fetch_fundamental_data(tickers)
@@ -6840,6 +6889,36 @@ def main():
                 datetime.now(),
                 key="end_date_main"
             )
+
+        # Data Parameters (Yahoo Finance)
+        with st.expander("🧭 Data Parameters", expanded=True):
+            data_interval = st.selectbox(
+                "Data Interval",
+                options=["1d", "1h", "30m", "15m", "5m"],
+                index=0,
+                help="Yahoo Finance interval. Intraday intervals have limited history; long ranges auto-fallback to 1d."
+            )
+            return_type = st.selectbox(
+                "Return Type",
+                options=["simple", "log"],
+                index=0,
+                help="Return calculation used throughout the platform."
+            )
+            auto_adjust = st.checkbox(
+                "Use Adjusted Prices (auto_adjust)",
+                value=True,
+                help="If enabled, Yahoo prices are adjusted for splits/dividends when available."
+            )
+
+        # Intraday interval guard (Yahoo limits intraday history)
+        try:
+            _days = (pd.to_datetime(end_date) - pd.to_datetime(start_date)).days
+            if data_interval != "1d" and _days > 59:
+                st.warning("Intraday intervals have limited history on Yahoo Finance. Falling back to **1d** for this date range.")
+                data_interval = "1d"
+        except Exception:
+            pass
+
         
         # Asset Selection
         st.markdown("<div class='section-header'>Asset Selection</div>", unsafe_allow_html=True)
@@ -7000,7 +7079,10 @@ def main():
                 benchmark_tickers=benchmark_tickers,
                 start_date=str(start_date),
                 end_date=str(end_date),
-                use_cache=use_cache
+                use_cache=use_cache,
+                interval=data_interval,
+                auto_adjust=auto_adjust,
+                return_type=return_type
             )
             
             progress_bar.progress(60)
