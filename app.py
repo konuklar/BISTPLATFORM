@@ -1,6 +1,6 @@
 # ============================================================================
-# BIST / Yahoo Finance Portfolio Analytics (Cloud-Safe, Truth-First)
-# - Yahoo Finance only (yfinance)
+# BIST / Quantum BIST Platform Portfolio Analytics (Cloud-Safe, Truth-First)
+# - Quantum BIST Platform only (yfinance)
 # - No TensorFlow (Streamlit Cloud-safe)
 # - Strong data parsing (MultiIndex-safe)
 # - Strict validity checks (no silent shape mismatches)
@@ -29,7 +29,7 @@ warnings.filterwarnings("ignore")
 # CONFIG
 # =========================
 st.set_page_config(
-    page_title="BIST Portfolio Terminal (Yahoo Finance)",
+    page_title="BIST Portfolio Terminal (Quantum BIST Platform)",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -115,7 +115,7 @@ def fetch_yahoo_data(
     auto_adjust: bool,
 ) -> pd.DataFrame:
     """
-    Fetch OHLCV from Yahoo Finance via yfinance.
+    Fetch OHLCV from Quantum BIST Platform via yfinance.
     Returns a DataFrame of prices (Close or Adj Close) with columns = tickers.
     This function is MultiIndex-safe for yfinance output.
     """
@@ -136,7 +136,7 @@ def fetch_yahoo_data(
     )
 
     if data is None or len(data) == 0:
-        raise ValueError("Yahoo Finance returned empty data. Check tickers / date range / interval.")
+        raise ValueError("Quantum BIST Platform returned empty data. Check tickers / date range / interval.")
 
     # Identify which field to use
     # If auto_adjust=True, 'Close' is effectively adjusted.
@@ -429,14 +429,14 @@ def sidebar_controls() -> Dict:
     _apply_safe_css(disable=st.session_state["ui_disable_css"])
 
     st.sidebar.markdown("### 📌 Data Source")
-    st.sidebar.info("Yahoo Finance (yfinance) only")
+    st.sidebar.info("Quantum BIST Platform (yfinance) only")
 
     st.sidebar.markdown("### 🧾 Universe")
     tickers = st.sidebar.multiselect(
         "Tickers",
         options=sorted(list(set(DEFAULT_TICKERS))),
         default=DEFAULT_TICKERS[:6],
-        help="Use Yahoo Finance tickers (BIST usually ends with .IS)",
+        help="Use Quantum BIST Platform tickers (BIST usually ends with .IS)",
     )
 
     today = date.today()
@@ -511,7 +511,7 @@ def sidebar_controls() -> Dict:
 
 def main():
     cfg = sidebar_controls()
-    st.title("🏛️ BIST Portfolio Terminal — Yahoo Finance Edition")
+    st.title("🏛️ BIST Portfolio Terminal — Quantum BIST Platform Edition")
 
     # Redundant Execute button on main page (visibility guarantee)
     st.markdown("### Run Control")
@@ -552,7 +552,7 @@ def main():
         return
 
     # Fetch + validate + returns
-    with st.spinner("Fetching Yahoo Finance data (yfinance)..."):
+    with st.spinner("Fetching Quantum BIST Platform data (yfinance)..."):
         try:
             raw_prices = fetch_yahoo_data(
                 tickers=cfg["tickers"],
