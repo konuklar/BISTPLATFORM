@@ -624,7 +624,7 @@ def main():
         st.plotly_chart(plot_corr(rets, "Return Correlations"), use_container_width=True)
 
     with tab4:
-        st.subheader("PyPortfolioOpt Optimization")
+        st.subheader("Quantum Portfolio Optimization")
         if not cfg["opt_enabled"]:
             st.info("Enable optimization in the sidebar to run PyPortfolioOpt.")
         else:
